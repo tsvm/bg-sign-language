@@ -49,7 +49,7 @@ pip install pymupdf pillow
 
 ```bash
 # Пълно извличане (препоръчително)
-python extract_sign_dictionary.py "Речник на българския жестов език.pdf"
+python extract_sign_dictionary.py rechnik_bg_zhestov_ezik.pdf
 ```
 
 Скриптът автоматично открива кои страници съдържат знаци и пропуска уводните страници, таблиците и индексите.
