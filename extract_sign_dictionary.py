@@ -51,9 +51,6 @@ ROW_TOLERANCE = 80
 # A caption block belongs to a row if its top is within this many points below the row bottom
 CAPTION_GAP = 150
 
-# Pages to skip – update SKIP_PAGES_BEFORE after running find_start.py
-SKIP_PAGES_BEFORE = 10
-SKIP_PAGES_AFTER  = 3
 
 # ── Data model ────────────────────────────────────────────────────────────────
 
@@ -413,6 +410,32 @@ def build_sqlite(entries: list[Entry]):
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
+def is_content_page(page: fitz.Page) -> bool:
+    """Return True if this page contains numbered sign entries."""
+    for b in page.get_text("blocks"):
+        x0, y0, x1, y1, text, _, btype = b
+        if btype != 0:
+            continue
+        if re.search(r'\b\d+[.\t]\s*[А-ЯA-Z]', text):
+            return True
+    return False
+
+
+def detect_content_pages(doc: fitz.Document) -> range:
+    """Find the contiguous range of pages that contain sign entries."""
+    first = None
+    last = None
+    for i in range(len(doc)):
+        if is_content_page(doc[i]):
+            if first is None:
+                first = i
+            last = i
+    if first is None:
+        print("WARNING: could not auto-detect content pages, processing all pages")
+        return range(len(doc))
+    return range(first, last + 1)
+
+
 def main():
     import argparse
     parser = argparse.ArgumentParser()
@@ -438,7 +461,8 @@ def main():
         s, e = args.pages.split("-")
         page_range = range(int(s) - 1, int(e))
     else:
-        page_range = range(SKIP_PAGES_BEFORE, total - SKIP_PAGES_AFTER)
+        page_range = detect_content_pages(doc)
+        print(f"Auto-detected content pages: {page_range.start + 1} – {page_range.stop} ({len(page_range)} pages)")
 
     all_entries: list[Entry] = []
 
