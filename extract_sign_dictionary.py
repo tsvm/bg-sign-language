@@ -286,12 +286,36 @@ def extract_page(page: fitz.Page, doc: fitz.Document, page_num: int,
         if debug:
             print(f"  After x-sort: {[(f'x={x:.0f}', l[:30]) for x,l in line_positions]}")
 
-        # Pair: leftmost image → leftmost caption line
-        for i, (rect, xref) in enumerate(row):
-            if i >= len(all_lines):
-                logging.warning(f"Page {page_num+1}: more images than captions in row")
-                break
+        # If there are more images than captions, some images are extra frames
+        # of the same concept (e.g. a two-person sign stored as two xrefs).
+        # Strategy: assign each caption to the nearest image by x-distance,
+        # then skip any image that is closer to an already-claimed image than
+        # to the next caption boundary.
+        #
+        # Simpler robust approach: evenly divide the row's x-range into N slots
+        # (one per caption), and assign each image to whichever slot it falls in.
+        # Take only the first image per slot.
 
+        n_captions = len(all_lines)
+        if n_captions == 0:
+            continue
+
+        # Build slot boundaries based on caption x-positions
+        caption_xs = [x for x, _ in line_positions]
+        # For each image, find the nearest caption x and assign to that caption
+        caption_to_image = {}  # caption_index -> (rect, xref) of first/leftmost image
+        for rect, xref in row:
+            img_cx = (rect.x0 + rect.x1) / 2
+            nearest_cap = min(range(n_captions), key=lambda k: abs(caption_xs[k] - img_cx))
+            if nearest_cap not in caption_to_image:
+                caption_to_image[nearest_cap] = (rect, xref)
+
+        # Pair each caption to its assigned image
+        for i in range(n_captions):
+            if i not in caption_to_image:
+                logging.warning(f"Page {page_num+1}: no image found for caption: {all_lines[i]}")
+                continue
+            rect, xref = caption_to_image[i]
             label_raw = all_lines[i]
             entry_number, label = parse_label(label_raw)
             filename = safe_filename(entry_number, label)
