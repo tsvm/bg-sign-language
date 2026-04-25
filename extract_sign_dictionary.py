@@ -239,13 +239,6 @@ def extract_page(page: fitz.Page, doc: fitz.Document, page_num: int,
         for _, block_text in matching_blocks:
             all_lines.extend(split_caption_block(block_text))
 
-        # Sort lines by entry number so order is deterministic
-        def line_sort_key(line):
-            m = re.match(r'^(\d+)', line.strip())
-            return int(m.group(1)) if m else 9999
-
-        all_lines.sort(key=line_sort_key)
-
         if debug:
             print(f"  Caption lines ({len(all_lines)}): {[l[:40] for l in all_lines]}")
 
@@ -255,7 +248,45 @@ def extract_page(page: fitz.Page, doc: fitz.Document, page_num: int,
                 f" — pairing by position anyway"
             )
 
-        # Pair: leftmost image → first line, etc.
+        # Match each caption line to the horizontally nearest image.
+        # We cannot trust text stream order — the PDF may store lines in a
+        # different order than their visual left-to-right position.
+        # Strategy: for each image (sorted left-to-right), find the caption
+        # line whose entry number position best corresponds to its x rank.
+        # Simpler: sort caption lines by their entry number's visual x-position
+        # is unknown, so instead we use the fact that caption x-spans within
+        # the block correspond to column positions — extract per-line x from
+        # the "words" level which gives individual word bboxes.
+
+        # Get word-level bboxes to find x-position of each caption number
+        line_positions = []  # (x_center_of_number, line_text)
+        words_data = page.get_text("words")  # (x0,y0,x1,y1,word,block,line,word_idx)
+        cap_y0 = matching_blocks[0][0]
+        cap_y1 = cap_y0 + 60  # caption block is thin
+
+        for line_text in all_lines:
+            m = re.match(r'^(\d+)', line_text.strip())
+            if not m:
+                line_positions.append((9999, line_text))
+                continue
+            num = m.group(1)
+            # Find this number in word-level data near the caption y
+            found_x = None
+            for w in words_data:
+                wx0, wy0, wx1, wy1, word, *_ = w
+                if word.rstrip('.') == num and cap_y0 - 10 < wy0 < cap_y0 + 80:
+                    found_x = (wx0 + wx1) / 2
+                    break
+            line_positions.append((found_x if found_x is not None else 9999, line_text))
+
+        # Sort caption lines by their x position (left to right)
+        line_positions.sort(key=lambda t: t[0])
+        all_lines = [text for _, text in line_positions]
+
+        if debug:
+            print(f"  After x-sort: {[(f'x={x:.0f}', l[:30]) for x,l in line_positions]}")
+
+        # Pair: leftmost image → leftmost caption line
         for i, (rect, xref) in enumerate(row):
             if i >= len(all_lines):
                 logging.warning(f"Page {page_num+1}: more images than captions in row")

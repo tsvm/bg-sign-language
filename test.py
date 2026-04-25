@@ -5,7 +5,11 @@ import io
 doc = fitz.open("rechnik_bg_zhestov_ezik.pdf")
 page = doc[35]  # page 2, 0-indexed
 
-
+print("=== TEXT BLOCKS (raw order) ===")
+for b in page.get_text("blocks"):
+    x0, y0, x1, y1, text, _, btype = b
+    if btype == 0 and text.strip():
+        print(f"  y={y0:.0f}  → {repr(text.strip())}")
 
 print("=== IMAGES ===")
 seen = set()
