@@ -303,19 +303,20 @@ def extract_page(page: fitz.Page, doc: fitz.Document, page_num: int,
         # Build slot boundaries based on caption x-positions
         caption_xs = [x for x, _ in line_positions]
         # For each image, find the nearest caption x and assign to that caption
-        caption_to_image = {}  # caption_index -> (rect, xref) of first/leftmost image
+        # caption_to_images: caption_index -> list of (rect, xref) sorted left-to-right
+        caption_to_images = {i: [] for i in range(n_captions)}
         for rect, xref in row:
             img_cx = (rect.x0 + rect.x1) / 2
             nearest_cap = min(range(n_captions), key=lambda k: abs(caption_xs[k] - img_cx))
-            if nearest_cap not in caption_to_image:
-                caption_to_image[nearest_cap] = (rect, xref)
+            caption_to_images[nearest_cap].append((rect, xref))
 
-        # Pair each caption to its assigned image
+        # Pair each caption to its assigned image(s)
         for i in range(n_captions):
-            if i not in caption_to_image:
+            assigned = caption_to_images[i]
+            if not assigned:
                 logging.warning(f"Page {page_num+1}: no image found for caption: {all_lines[i]}")
                 continue
-            rect, xref = caption_to_image[i]
+
             label_raw = all_lines[i]
             entry_number, label = parse_label(label_raw)
             filename = safe_filename(entry_number, label)
@@ -328,11 +329,48 @@ def extract_page(page: fitz.Page, doc: fitz.Document, page_num: int,
                 out_path = OUTPUT_DIR / filename
 
             try:
-                img_dict = doc.extract_image(xref)
-                img_bytes = fix_image(img_dict)
-                out_path.write_bytes(img_bytes)
+                if len(assigned) == 1:
+                    # Single image — extract directly
+                    _, xref = assigned[0]
+                    img_dict = doc.extract_image(xref)
+                    img_bytes = fix_image(img_dict)
+                    out_path.write_bytes(img_bytes)
+                else:
+                    # Multiple images for one concept — stitch left-to-right
+                    if not HAS_PIL:
+                        # Fallback: just save the first image
+                        _, xref = assigned[0]
+                        img_dict = doc.extract_image(xref)
+                        img_bytes = fix_image(img_dict)
+                        out_path.write_bytes(img_bytes)
+                    else:
+                        from PIL import Image as PILImage
+                        import io
+                        frames = []
+                        for _, xref in assigned:
+                            img_dict = doc.extract_image(xref)
+                            img_bytes = fix_image(img_dict)
+                            frame = PILImage.open(io.BytesIO(img_bytes)).convert("RGB")
+                            frames.append(frame)
+                        # Normalise heights
+                        target_h = max(f.height for f in frames)
+                        resized = []
+                        for f in frames:
+                            if f.height != target_h:
+                                ratio = target_h / f.height
+                                f = f.resize((int(f.width * ratio), target_h), PILImage.LANCZOS)
+                            resized.append(f)
+                        total_w = sum(f.width for f in resized)
+                        stitched = PILImage.new("RGB", (total_w, target_h), (255, 255, 255))
+                        x_off = 0
+                        for f in resized:
+                            stitched.paste(f, (x_off, 0))
+                            x_off += f.width
+                        buf = io.BytesIO()
+                        stitched.save(buf, format="JPEG", quality=92)
+                        out_path.write_bytes(buf.getvalue())
             except Exception as e:
-                logging.warning(f"Page {page_num+1}: could not extract xref={xref}: {e}")
+                logging.warning(f"Page {page_num+1}: could not extract/stitch: {e}")
                 continue
 
             if debug:
