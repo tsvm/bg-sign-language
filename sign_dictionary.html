@@ -19,6 +19,18 @@
     --radius: 4px;
   }
 
+  :root.light {
+    --bg: #f8f8f5;
+    --surface: #ffffff;
+    --surface2: #efefec;
+    --border: #d8d8d2;
+    --accent: #5a8a00;
+    --accent2: #0070a8;
+    --text: #1a1a18;
+    --text-dim: #5a5a54;
+    --text-muted: #b0b0a8;
+  }
+
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
   html { font-size: 16px; }
@@ -37,9 +49,10 @@
     padding: 2.5rem 3rem 2rem;
     border-bottom: 1px solid var(--border);
     display: flex;
-    align-items: flex-end;
+    align-items: center;
     gap: 2rem;
   }
+  header .header-text { flex: 1; }
 
   .logo-mark {
     width: 48px;
@@ -409,6 +422,62 @@
     color: var(--bg);
     border-color: var(--accent);
   }
+
+  /* ── Attribution bar ── */
+  .attribution-bar {
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+    padding: 0.5rem 3rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .attribution-text {
+    font-size: 0.72rem;
+    color: var(--text-dim);
+    font-style: italic;
+    line-height: 1.5;
+  }
+
+  .attribution-text a {
+    color: var(--accent2);
+    text-decoration: none;
+  }
+
+  .attribution-text a:hover {
+    text-decoration: underline;
+  }
+
+  /* ── Theme toggle ── */
+  .theme-toggle {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.15rem;
+    transition: all 0.2s;
+    flex-shrink: 0;
+    margin-left: auto;
+  }
+
+  .theme-toggle:hover {
+    border-color: var(--accent);
+    transform: scale(1.1);
+  }
+
+  @media (max-width: 600px) {
+    .attribution-bar {
+      padding: 0.5rem 1.25rem;
+    }
+  }
 </style>
 </head>
 <body>
@@ -428,7 +497,18 @@
     <h1>Речник на българския жестов език</h1>
     <p>Въведете изречение — вижте знаците</p>
   </div>
+  <button class="theme-toggle" id="theme-toggle" title="Смени тема">
+    <span class="toggle-icon">☀️</span>
+  </button>
 </header>
+
+<div class="attribution-bar">
+  <span class="attribution-text">
+    © Министерство на образованието и науката (МОН) и авторите на речника.
+    Съдържанието се използва с образователна цел, без модификации.
+    <a href="https://www.mon.bg/dyasno-menyu/priobshtavashto-obrazovanie/podkrepa-za-lichnostno-razvitie-na-deczata-i-ucheniczite/podkrepa-za-decza-i-ucheniczi-sas-speczialni-obrazovatelni-potrebnosti/balgarski-zhestov-ezik/uchebni-resursi/" target="_blank" rel="noopener">Оригинален ресурс на сайта на МОН →</a>
+  </span>
+</div>
 
 <section class="input-section">
   <div class="input-wrapper">
@@ -774,6 +854,29 @@ function loadFromUrl() {
     render(q);
   }
 }
+
+// ── Theme toggle ─────────────────────────────────────────────────────────────
+const themeToggle = document.getElementById('theme-toggle');
+const toggleIcon  = themeToggle.querySelector('.toggle-icon');
+
+function applyTheme(light) {
+  if (light) {
+    document.documentElement.classList.add('light');
+    toggleIcon.textContent  = '🌙';
+  } else {
+    document.documentElement.classList.remove('light');
+    toggleIcon.textContent  = '☀️';
+  }
+  localStorage.setItem('theme', light ? 'light' : 'dark');
+}
+
+themeToggle.addEventListener('click', () => {
+  applyTheme(!document.documentElement.classList.contains('light'));
+});
+
+// Restore saved preference
+const savedTheme = localStorage.getItem('theme');
+if (savedTheme === 'light') applyTheme(true);
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 loadIndex().then(() => loadFromUrl());
